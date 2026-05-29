@@ -1,0 +1,16 @@
+{
+  "name": "copass",
+  "version": "1.0.0",
+  "description": "Context relay tool — seamlessly switch between AI coding assistants when quota runs out",
+  "main": "index.js",
+  "bin": {
+    "copass": "./index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["ai", "context", "relay", "claude", "codex", "copilot", "antigravity"],
+  "author": "NecmiKural",
+  "license": "MIT"
+}
