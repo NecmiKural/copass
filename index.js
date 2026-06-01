@@ -84,7 +84,7 @@ ${C.bold}Komutlar:${C.reset}
 
 ${C.bold}Seçenekler (relay):${C.reset}
   ${C.yellow}--from${C.reset} <ajan>      Kaynak ajan: ${VALID_AGENTS.join(', ')}
-  ${C.yellow}--messages${C.reset} <n>     Dahil edilecek mesaj sayısı (varsayılan: 5)
+  ${C.yellow}--messages${C.reset} <n>     Dahil edilecek mesaj sayısı (varsayılan: 10)
   ${C.yellow}--dir${C.reset} <yol>        Proje dizini (varsayılan: mevcut dizin)
 
 ${C.bold}Seçenekler (list):${C.reset}
@@ -110,7 +110,7 @@ ${C.bold}Örnekler:${C.reset}
 async function cmdRelay(args) {
   const projectDir = resolve(args.dir || process.cwd());
   const from = args.from || undefined;
-  const messageCount = args.messages ? parseInt(args.messages, 10) : 5;
+  const messageCount = args.messages ? parseInt(args.messages, 10) : 10;
 
   if (from && !VALID_AGENTS.includes(from)) {
     console.error(

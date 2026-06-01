@@ -11,7 +11,7 @@ import { homedir } from 'node:os';
 
 const AGENT_NAME = 'codex';
 export const name = AGENT_NAME;
-const DEFAULT_PAIR_COUNT = 5;
+const DEFAULT_PAIR_COUNT = 10;
 const MAX_CONTENT_LENGTH = 2000;
 
 /**
@@ -175,6 +175,38 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
     for (const entry of entries) {
       if (entry.type === 'session_meta') continue;
 
+      // ── New format: response_item with payload ──
+      if (entry.type === 'response_item') {
+        const payload = entry.payload;
+        if (!payload || payload.type !== 'message') continue;
+
+        const role = payload.role;
+        if (role !== 'user' && role !== 'assistant') continue;
+
+        // Content lives in payload.content — an array of {type, text} blocks
+        let text = '';
+        if (Array.isArray(payload.content)) {
+          const parts = [];
+          for (const block of payload.content) {
+            if (typeof block === 'string') parts.push(block);
+            else if (block && block.text) parts.push(block.text);
+          }
+          text = parts.join('\n');
+        } else {
+          text = extractContent(payload.content || '');
+        }
+
+        if (text) {
+          messages.push({
+            role,
+            content: truncate(text),
+            ...(entry.timestamp ? { timestamp: entry.timestamp } : {}),
+          });
+        }
+        continue;
+      }
+
+      // ── Old format: flat entries with role or type field ──
       const role = entry.role || entry.type;
       if (role === 'user' || role === 'human') {
         const text = extractContent(entry.content || entry.message || '');
@@ -226,6 +258,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       branch,
       messages: lastMessages,
       timestamp: fileStat.mtime.toISOString(),
+      logFilePath: bestFile,
     };
   } catch {
     return null;

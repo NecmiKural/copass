@@ -15,7 +15,7 @@ import { homedir } from 'node:os';
 
 const AGENT_NAME = 'vscode-copilot';
 export const name = AGENT_NAME;
-const DEFAULT_PAIR_COUNT = 5;
+const DEFAULT_PAIR_COUNT = 10;
 const MAX_CONTENT_LENGTH = 2000;
 
 /**
@@ -56,15 +56,14 @@ function parseJsonl(filePath) {
 }
 
 /**
- * Find the most recently modified .jsonl file in a directory.
+ * Collect all .jsonl files in a directory, sorted by mtime descending (most recent first).
  * @param {string} dir
- * @returns {string|null}
+ * @returns {{ filePath: string, mtime: number }[]}
  */
-function findLatestJsonlFile(dir) {
-  if (!existsSync(dir)) return null;
+function collectSortedJsonlFiles(dir) {
+  if (!existsSync(dir)) return [];
 
-  let latest = null;
-  let latestMtime = 0;
+  const results = [];
 
   try {
     const entries = readdirSync(dir);
@@ -73,19 +72,19 @@ function findLatestJsonlFile(dir) {
       const fullPath = join(dir, entry);
       try {
         const st = statSync(fullPath);
-        if (st.isFile() && st.mtimeMs > latestMtime) {
-          latestMtime = st.mtimeMs;
-          latest = fullPath;
+        if (st.isFile()) {
+          results.push({ filePath: fullPath, mtime: st.mtimeMs });
         }
       } catch {
         // Skip unreadable
       }
     }
   } catch {
-    return null;
+    return [];
   }
 
-  return latest;
+  results.sort((a, b) => b.mtime - a.mtime);
+  return results;
 }
 
 /**
@@ -133,6 +132,33 @@ function applyDelta(state, keyPath, value) {
 }
 
 /**
+ * Apply a splice (kind:2) operation to a state object.
+ * Navigates to the array at the given key path and appends the items.
+ * @param {object} state
+ * @param {Array} keyPath — array of string/number keys leading to an array
+ * @param {Array} items — items to append
+ */
+function applySplice(state, keyPath, items) {
+  if (!Array.isArray(keyPath) || !Array.isArray(items)) return;
+
+  let current = state;
+  for (const key of keyPath) {
+    if (current == null) return;
+    if (Array.isArray(current)) {
+      current = current[key];
+    } else if (typeof current === 'object') {
+      current = current[key];
+    } else {
+      return;
+    }
+  }
+
+  if (Array.isArray(current)) {
+    current.push(...items);
+  }
+}
+
+/**
  * Reconstruct the full session state from a delta-format JSONL.
  * @param {object[]} entries — parsed JSONL entries
  * @returns {object|null} — the reconstructed session state
@@ -149,6 +175,13 @@ function reconstructSession(entries) {
       // kind:0 is the full snapshot; use its data as the state
       state = JSON.parse(JSON.stringify(entries[i]));
       delete state.kind; // Remove meta field
+
+      // New format wraps everything under a `v` key.
+      // Unwrap it so that delta key paths (e.g. ['requests', 0, ...]) resolve correctly.
+      if (state.v && typeof state.v === 'object' && !Array.isArray(state.v)) {
+        state = state.v;
+      }
+
       startIdx = i + 1;
       break;
     }
@@ -158,14 +191,21 @@ function reconstructSession(entries) {
     // No snapshot found — try using the first entry as base
     state = JSON.parse(JSON.stringify(entries[0]));
     delete state.kind;
+    if (state.v && typeof state.v === 'object' && !Array.isArray(state.v)) {
+      state = state.v;
+    }
     startIdx = 1;
   }
 
-  // Apply all subsequent kind:1 deltas
+  // Apply all subsequent deltas
   for (let i = startIdx; i < entries.length; i++) {
     const entry = entries[i];
     if (entry.kind === 1 && entry.k && entry.v !== undefined) {
+      // kind:1 — set a value at a key path
       applyDelta(state, entry.k, entry.v);
+    } else if (entry.kind === 2 && entry.k && Array.isArray(entry.v)) {
+      // kind:2 — splice/append items to an array at a key path
+      applySplice(state, entry.k, entry.v);
     }
   }
 
@@ -210,6 +250,16 @@ function extractMessages(state) {
 
       if (typeof response === 'string') {
         assistantText = response;
+      } else if (Array.isArray(response)) {
+        // New format: response is an array of {kind, value, id} items.
+        // Text content is in items where kind is null/undefined.
+        const parts = [];
+        for (const item of response) {
+          if (item && (item.kind === null || item.kind === undefined) && typeof item.value === 'string') {
+            parts.push(item.value);
+          }
+        }
+        assistantText = parts.join('');
       } else if (response.message?.text) {
         assistantText = response.message.text;
       } else if (response.message?.content) {
@@ -308,56 +358,60 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
 
     if (!matchedWorkspaceDir) return null;
 
-    // Find chat session JSONL files
+    // Find chat session JSONL files, sorted by recency
     const chatSessionsDir = join(matchedWorkspaceDir, 'chatSessions');
-    const sessionFile = findLatestJsonlFile(chatSessionsDir);
-    if (!sessionFile) return null;
+    const sessionFiles = collectSortedJsonlFiles(chatSessionsDir);
+    if (sessionFiles.length === 0) return null;
 
-    const fileStat = statSync(sessionFile);
-    const entries = parseJsonl(sessionFile);
-    if (entries.length === 0) return null;
+    // Iterate through sessions by recency — skip empty ones
+    for (const { filePath: sessionFile, mtime } of sessionFiles) {
+      const entries = parseJsonl(sessionFile);
+      if (entries.length === 0) continue;
 
-    // Reconstruct the session state from delta format
-    const sessionState = reconstructSession(entries);
-    if (!sessionState) return null;
+      // Reconstruct the session state from delta format
+      const sessionState = reconstructSession(entries);
+      if (!sessionState) continue;
 
-    // Extract messages
-    const allMessages = extractMessages(sessionState);
-    if (allMessages.length === 0) return null;
+      // Extract messages
+      const allMessages = extractMessages(sessionState);
+      if (allMessages.length === 0) continue;
 
-    // Extract the last N pairs (user + assistant)
-    const pairs = [];
-    let i = allMessages.length - 1;
-    while (i >= 0 && pairs.length < pairCount) {
-      if (allMessages[i].role === 'assistant') {
-        const assistantMsg = allMessages[i];
-        let j = i - 1;
-        while (j >= 0 && allMessages[j].role !== 'user') j--;
-        if (j >= 0) {
-          pairs.unshift(allMessages[j], assistantMsg);
-          i = j - 1;
+      // Extract the last N pairs (user + assistant)
+      const pairs = [];
+      let i = allMessages.length - 1;
+      while (i >= 0 && pairs.length < pairCount) {
+        if (allMessages[i].role === 'assistant') {
+          const assistantMsg = allMessages[i];
+          let j = i - 1;
+          while (j >= 0 && allMessages[j].role !== 'user') j--;
+          if (j >= 0) {
+            pairs.unshift(allMessages[j], assistantMsg);
+            i = j - 1;
+          } else {
+            pairs.unshift(assistantMsg);
+            i--;
+          }
         } else {
-          pairs.unshift(assistantMsg);
           i--;
         }
-      } else {
-        i--;
       }
+
+      const lastMessages = pairs.slice(-(pairCount * 2));
+
+      // Extract session ID from file name (strip .jsonl extension)
+      const sessionFileName = sessionFile.split('/').pop();
+      const sessionId = sessionFileName ? sessionFileName.replace('.jsonl', '') : null;
+
+      return {
+        agent: AGENT_NAME,
+        sessionId,
+        branch: null, // Copilot Chat doesn't typically store branch info in session files
+        messages: lastMessages,
+        timestamp: new Date(mtime).toISOString(),
+      };
     }
 
-    const lastMessages = pairs.slice(-(pairCount * 2));
-
-    // Extract session ID from file name (strip .jsonl extension)
-    const sessionFileName = sessionFile.split('/').pop();
-    const sessionId = sessionFileName ? sessionFileName.replace('.jsonl', '') : null;
-
-    return {
-      agent: AGENT_NAME,
-      sessionId,
-      branch: null, // Copilot Chat doesn't typically store branch info in session files
-      messages: lastMessages,
-      timestamp: fileStat.mtime.toISOString(),
-    };
+    return null;
   } catch {
     return null;
   }
