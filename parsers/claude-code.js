@@ -11,7 +11,7 @@ import { homedir } from 'node:os';
 
 const AGENT_NAME = 'claude-code';
 export const name = AGENT_NAME;
-const DEFAULT_PAIR_COUNT = 5;
+const DEFAULT_PAIR_COUNT = 10;
 const MAX_CONTENT_LENGTH = 2000;
 
 /**
@@ -177,8 +177,9 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
     // Collect user and assistant messages, skipping tool_use/tool_result
     const messages = [];
     for (const entry of entries) {
-      if (entry.type === 'human') {
-        const text = extractContent(entry.content);
+      if (entry.type === 'human' || entry.type === 'user') {
+        // Old format: entry.content; New format: entry.message.content
+        const text = extractContent(entry.content || entry.message?.content || entry.message || '');
         if (text) {
           messages.push({
             role: 'user',
@@ -187,7 +188,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
           });
         }
       } else if (entry.type === 'assistant') {
-        const text = extractContent(entry.content);
+        const text = extractContent(entry.content || entry.message?.content || entry.message || '');
         if (text) {
           messages.push({
             role: 'assistant',
@@ -231,6 +232,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       branch: meta.branch || null,
       messages: lastMessages,
       timestamp: fileStat.mtime.toISOString(),
+      logFilePath: sessionFile,
     };
   } catch {
     return null;

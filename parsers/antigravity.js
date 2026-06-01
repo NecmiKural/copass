@@ -11,7 +11,7 @@ import { homedir } from 'node:os';
 
 const AGENT_NAME = 'antigravity';
 export const name = AGENT_NAME;
-const DEFAULT_PAIR_COUNT = 5;
+const DEFAULT_PAIR_COUNT = 10;
 const MAX_CONTENT_LENGTH = 2000;
 
 /**
@@ -212,6 +212,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       branch: null, // Antigravity logs don't typically store branch info
       messages: lastMessages,
       timestamp: new Date(matchedTranscript.mtime).toISOString(),
+      logFilePath: matchedTranscript.filePath,
     };
   } catch {
     return null;

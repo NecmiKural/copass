@@ -1,14 +1,8 @@
-# copass 🚀
+# copass 🧭
 
 > **Context relay CLI tool** for switching between AI coding assistants with **zero context loss** when your rate limits/quota run out.
 
 `copass` automatically discovers your local active AI coding assistant sessions, extracts the last few messages of your conversation, gathers the current git branch/diff/status, and generates a structured XML **handover prompt** copied directly to your clipboard. You can paste this prompt into your next AI assistant and resume your work exactly where you left off.
-
----
-
-## 🇹🇷 Türkçe Özet
-
-Farklı yapay zeka kodlama araçları (Claude Code, Codex, Antigravity, VS Code Copilot) kullanırken kotanız bittiğinde veya takıldığınızda, diğer araca geçerken tüm sohbet geçmişini ve git durumunu tek bir komutla yeni araca aktarmanızı sağlayan yerel ve bağımsız bir CLI aracıdır.
 
 ---
 

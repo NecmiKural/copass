@@ -45,7 +45,7 @@ function escapeXml(str) {
  * @returns {Promise<{ xml: string, savedPath: string, agentName: string, messageCount: number }>}
  */
 export async function createHandover(projectDir, options = {}) {
-  const { from, messageCount = 5 } = options;
+  const { from, messageCount = 10 } = options;
 
   // ── 1. Discover sessions ──────────────────────────────────────────────
   const results = await Promise.all(
@@ -103,6 +103,7 @@ export async function createHandover(projectDir, options = {}) {
     <project>${escapeXml(projectDir)}</project>
     <git_branch>${escapeXml(gitState.branch)}</git_branch>
     <timestamp>${escapeXml(now)}</timestamp>
+    <log_file_path>${escapeXml(selected.logFilePath || '')}</log_file_path>
   </meta>
 
   <git_state>
