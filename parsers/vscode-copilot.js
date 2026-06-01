@@ -407,6 +407,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
         sessionId,
         branch: null, // Copilot Chat doesn't typically store branch info in session files
         messages: lastMessages,
+        totalMessages: allMessages.length,
         timestamp: new Date(mtime).toISOString(),
       };
     }

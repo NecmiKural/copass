@@ -221,7 +221,7 @@ async function cmdList(args) {
       ? pad(' ' + new Date(session.timestamp).toISOString().slice(0, 19).replace('T', ' '), colWidths.timestamp)
       : pad(' —', colWidths.timestamp);
     const msgs = session?.messages
-      ? pad(' ' + String(session.messages.length), colWidths.messages)
+      ? pad(' ' + String(session.totalMessages ?? session.messages.length), colWidths.messages)
       : pad(' —', colWidths.messages);
     const branch = pad(' ' + (gitState.branch || '—'), colWidths.branch);
 
