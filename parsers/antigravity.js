@@ -53,6 +53,55 @@ function parseJsonl(filePath) {
 }
 
 /**
+ * Clean a path string by trimming and removing wrapping quotes.
+ * @param {string} val
+ * @returns {string}
+ */
+function cleanPath(val) {
+  if (typeof val !== 'string') return '';
+  let s = val.trim();
+  if (s.startsWith('"') && s.endsWith('"')) {
+    s = s.slice(1, -1);
+  }
+  if (s.startsWith("'") && s.endsWith("'")) {
+    s = s.slice(1, -1);
+  }
+  return s;
+}
+
+/**
+ * Recursively extract all absolute paths from a tool call arguments object or array.
+ * @param {*} obj
+ * @param {string[]} paths
+ */
+function extractPathsFromObject(obj, paths) {
+  if (!obj || typeof obj !== 'object') return;
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      extractPathsFromObject(item, paths);
+    }
+    return;
+  }
+
+  for (const val of Object.values(obj)) {
+    if (typeof val === 'string') {
+      const cleaned = cleanPath(val);
+      const isAbs = cleaned.startsWith('/') || /^[a-zA-Z]:[\\\/]/.test(cleaned) || cleaned.startsWith('\\\\');
+      if (isAbs) {
+        try {
+          paths.push(resolve(cleaned));
+        } catch {
+          // Ignore resolve errors
+        }
+      }
+    } else if (val && typeof val === 'object') {
+      extractPathsFromObject(val, paths);
+    }
+  }
+}
+
+/**
  * Check if a transcript references a given project directory.
  * Looks for the projectDir path in content strings and tool_calls fields.
  * @param {object[]} entries — parsed JSONL entries
@@ -62,18 +111,33 @@ function parseJsonl(filePath) {
 function transcriptReferencesProject(entries, projectDir) {
   const target = resolve(projectDir);
 
+  // 1. Collect all paths from tool calls across all entries
+  const toolPaths = [];
   for (const entry of entries) {
-    // Check content field
-    if (typeof entry.content === 'string' && entry.content.includes(target)) {
-      return true;
+    if (entry.tool_calls && Array.isArray(entry.tool_calls)) {
+      extractPathsFromObject(entry.tool_calls, toolPaths);
     }
+  }
 
-    // Check tool_calls — may be an array of objects or a string
-    if (entry.tool_calls) {
-      const toolStr = typeof entry.tool_calls === 'string'
-        ? entry.tool_calls
-        : JSON.stringify(entry.tool_calls);
-      if (toolStr.includes(target)) {
+  // 2. If we found tool calls with paths, decide strictly based on them
+  if (toolPaths.length > 0) {
+    for (const path of toolPaths) {
+      if (path === target || path.startsWith(target + '/')) {
+        return true;
+      }
+    }
+    return false; // Tool calls exist, but none target the project workspace
+  }
+
+  // 3. Fallback: If no tool calls exist (e.g. brand new session or Q&A),
+  // check the first user prompt for a boundary-safe path reference.
+  const firstUserEntry = entries.find((e) => e.source === 'USER_EXPLICIT');
+  if (firstUserEntry && typeof firstUserEntry.content === 'string') {
+    const content = firstUserEntry.content;
+    const index = content.indexOf(target);
+    if (index >= 0) {
+      const nextChar = content[index + target.length];
+      if (!nextChar || /[^a-zA-Z0-9_\-\/]/.test(nextChar)) {
         return true;
       }
     }
