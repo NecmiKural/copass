@@ -211,6 +211,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       sessionId,
       branch: null, // Antigravity logs don't typically store branch info
       messages: lastMessages,
+      totalMessages: messages.length,
       timestamp: new Date(matchedTranscript.mtime).toISOString(),
       logFilePath: matchedTranscript.filePath,
     };

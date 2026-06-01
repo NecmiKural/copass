@@ -231,6 +231,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       sessionId: meta.sessionId || null,
       branch: meta.branch || null,
       messages: lastMessages,
+      totalMessages: messages.length,
       timestamp: fileStat.mtime.toISOString(),
       logFilePath: sessionFile,
     };
