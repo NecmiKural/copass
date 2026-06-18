@@ -8,6 +8,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { isCompactionSummary } from './utils.js';
 
 const AGENT_NAME = 'antigravity';
 export const name = AGENT_NAME;
@@ -224,11 +225,15 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
     const sessionId = brainIdx >= 0 ? pathParts[brainIdx + 1] : null;
 
     // Collect user and assistant messages
+    let compactionSummary = null;
     const messages = [];
     for (const entry of matchedEntries) {
       if (entry.source === 'USER_EXPLICIT') {
         const text = typeof entry.content === 'string' ? entry.content : '';
         if (text) {
+          if (isCompactionSummary(text)) {
+            compactionSummary = text;
+          }
           messages.push({
             role: 'user',
             content: truncate(text),
@@ -238,6 +243,9 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       } else if (entry.source === 'MODEL' && entry.type === 'PLANNER_RESPONSE') {
         const text = typeof entry.content === 'string' ? entry.content : '';
         if (text) {
+          if (isCompactionSummary(text)) {
+            compactionSummary = text;
+          }
           messages.push({
             role: 'assistant',
             content: truncate(text),
@@ -278,6 +286,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       totalMessages: messages.length,
       timestamp: new Date(matchedTranscript.mtime).toISOString(),
       logFilePath: matchedTranscript.filePath,
+      compactionSummary,
     };
   } catch {
     return null;
