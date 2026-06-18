@@ -8,6 +8,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { isCompactionSummary } from './utils.js';
 
 const AGENT_NAME = 'claude-code';
 export const name = AGENT_NAME;
@@ -175,12 +176,16 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
     const meta = extractMetadata(entries);
 
     // Collect user and assistant messages, skipping tool_use/tool_result
+    let compactionSummary = null;
     const messages = [];
     for (const entry of entries) {
       if (entry.type === 'human' || entry.type === 'user') {
         // Old format: entry.content; New format: entry.message.content
         const text = extractContent(entry.content || entry.message?.content || entry.message || '');
         if (text) {
+          if (isCompactionSummary(text)) {
+            compactionSummary = text;
+          }
           messages.push({
             role: 'user',
             content: truncate(text),
@@ -190,6 +195,9 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       } else if (entry.type === 'assistant') {
         const text = extractContent(entry.content || entry.message?.content || entry.message || '');
         if (text) {
+          if (isCompactionSummary(text)) {
+            compactionSummary = text;
+          }
           messages.push({
             role: 'assistant',
             content: truncate(text),
@@ -234,6 +242,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       totalMessages: messages.length,
       timestamp: fileStat.mtime.toISOString(),
       logFilePath: sessionFile,
+      compactionSummary,
     };
   } catch {
     return null;

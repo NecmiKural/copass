@@ -12,6 +12,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { isCompactionSummary } from './utils.js';
 
 const AGENT_NAME = 'vscode-copilot';
 export const name = AGENT_NAME;
@@ -217,7 +218,7 @@ function reconstructSession(entries) {
  * @param {object} state
  * @returns {{ role: string, content: string, timestamp?: string }[]}
  */
-function extractMessages(state) {
+function extractMessages(state, summaryCollector = {}) {
   const messages = [];
 
   // Messages are typically in state.requests array
@@ -236,9 +237,13 @@ function extractMessages(state) {
       '';
 
     if (userText) {
+      const rawUserText = typeof userText === 'string' ? userText : String(userText);
+      if (isCompactionSummary(rawUserText)) {
+        summaryCollector.compactionSummary = rawUserText;
+      }
       messages.push({
         role: 'user',
-        content: truncate(typeof userText === 'string' ? userText : String(userText)),
+        content: truncate(rawUserText),
         ...(req.timestamp ? { timestamp: req.timestamp } : {}),
       });
     }
@@ -277,6 +282,9 @@ function extractMessages(state) {
       }
 
       if (assistantText) {
+        if (isCompactionSummary(assistantText)) {
+          summaryCollector.compactionSummary = assistantText;
+        }
         messages.push({
           role: 'assistant',
           content: truncate(assistantText),
@@ -292,9 +300,13 @@ function extractMessages(state) {
     // We include it only if the last message isn't already from the user
     const lastMsg = messages[messages.length - 1];
     if (!lastMsg || lastMsg.role !== 'user') {
+      const rawInput = state.inputState.inputText;
+      if (isCompactionSummary(rawInput)) {
+        summaryCollector.compactionSummary = rawInput;
+      }
       messages.push({
         role: 'user',
-        content: truncate(state.inputState.inputText),
+        content: truncate(rawInput),
       });
     }
   }
@@ -373,7 +385,8 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       if (!sessionState) continue;
 
       // Extract messages
-      const allMessages = extractMessages(sessionState);
+      const summaryCollector = { compactionSummary: null };
+      const allMessages = extractMessages(sessionState, summaryCollector);
       if (allMessages.length === 0) continue;
 
       // Extract the last N pairs (user + assistant)
@@ -409,6 +422,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
         messages: lastMessages,
         totalMessages: allMessages.length,
         timestamp: new Date(mtime).toISOString(),
+        compactionSummary: summaryCollector.compactionSummary,
       };
     }
 

@@ -71,36 +71,36 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.log(`
-${C.bold}${C.cyan}copass${C.reset} — AI ajan bağlam aktarım aracı
+${C.bold}${C.cyan}copass${C.reset} — AI agent context relay tool
 
-${C.bold}Kullanım:${C.reset}
-  ${C.green}copass relay${C.reset}  [--from <ajan>] [--messages <n>] [--dir <yol>]
-  ${C.green}copass list${C.reset}   [--dir <yol>]
+${C.bold}Usage:${C.reset}
+  ${C.green}copass relay${C.reset}  [--from <agent>] [--messages <n>] [--dir <path>]
+  ${C.green}copass list${C.reset}   [--dir <path>]
   ${C.green}copass --help${C.reset}
 
-${C.bold}Komutlar:${C.reset}
-  ${C.cyan}relay${C.reset}   Handover XML oluştur ve panoya kopyala
-  ${C.cyan}list${C.reset}    Algılanan ajan oturumlarını listele
+${C.bold}Commands:${C.reset}
+  ${C.cyan}relay${C.reset}   Create handover XML and copy to clipboard
+  ${C.cyan}list${C.reset}    List detected agent sessions
 
-${C.bold}Seçenekler (relay):${C.reset}
-  ${C.yellow}--from${C.reset} <ajan>      Kaynak ajan: ${VALID_AGENTS.join(', ')}
-  ${C.yellow}--messages${C.reset} <n>     Dahil edilecek mesaj sayısı (varsayılan: 10)
-  ${C.yellow}--dir${C.reset} <yol>        Proje dizini (varsayılan: mevcut dizin)
+${C.bold}Options (relay):${C.reset}
+  ${C.yellow}--from${C.reset} <agent>      Source agent: ${VALID_AGENTS.join(', ')}
+  ${C.yellow}--messages${C.reset} <n>     Number of messages to include (default: 10)
+  ${C.yellow}--dir${C.reset} <path>        Project directory (default: current directory)
 
-${C.bold}Seçenekler (list):${C.reset}
-  ${C.yellow}--dir${C.reset} <yol>        Proje dizini (varsayılan: mevcut dizin)
+${C.bold}Options (list):${C.reset}
+  ${C.yellow}--dir${C.reset} <path>        Project directory (default: current directory)
 
-${C.bold}Örnekler:${C.reset}
-  ${C.dim}# Otomatik algıla ve aktar${C.reset}
+${C.bold}Examples:${C.reset}
+  ${C.dim}# Auto-detect and relay${C.reset}
   copass relay
 
-  ${C.dim}# Claude Code'dan Codex'e aktar${C.reset}
+  ${C.dim}# Relay from Claude Code to Codex${C.reset}
   copass relay --from claude-code
 
-  ${C.dim}# Son 10 mesajı dahil et${C.reset}
+  ${C.dim}# Include last 10 messages${C.reset}
   copass relay --messages 10
 
-  ${C.dim}# Belirli bir proje dizininde çalış${C.reset}
+  ${C.dim}# Run in a specific project directory${C.reset}
   copass relay --dir /path/to/project
 `);
 }
@@ -114,13 +114,13 @@ async function cmdRelay(args) {
 
   if (from && !VALID_AGENTS.includes(from)) {
     console.error(
-      `${C.red}Hata:${C.reset} Bilinmeyen ajan "${from}". Geçerli ajanlar: ${VALID_AGENTS.join(', ')}`,
+      `${C.red}Error:${C.reset} Unknown agent "${from}". Valid agents: ${VALID_AGENTS.join(', ')}`,
     );
     process.exit(1);
   }
 
   if (isNaN(messageCount) || messageCount < 1) {
-    console.error(`${C.red}Hata:${C.reset} --messages değeri pozitif bir sayı olmalı.`);
+    console.error(`${C.red}Error:${C.reset} --messages value must be a positive number.`);
     process.exit(1);
   }
 
@@ -135,7 +135,7 @@ async function cmdRelay(args) {
       execSync('pbcopy', { input: xml, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
     } catch {
       // pbcopy might not be available on non-macOS
-      console.warn(`${C.yellow}Uyarı:${C.reset} Panoya kopyalanamadı (pbcopy bulunamadı).`);
+      console.warn(`${C.yellow}Warning:${C.reset} Failed to copy to clipboard (pbcopy not found).`);
     }
 
     // Count changed files from git status
@@ -146,22 +146,22 @@ async function cmdRelay(args) {
 
     // Success output
     console.log('');
-    console.log(`  ${C.green}✅ Handover oluşturuldu!${C.reset}`);
+    console.log(`  ${C.green}Handover created!${C.reset}`);
     console.log('');
-    console.log(`  ${C.bold}Kaynak ajan:${C.reset}      ${C.cyan}${agentName}${C.reset}`);
-    console.log(`  ${C.bold}Mesaj sayısı:${C.reset}     ${C.yellow}${extractedCount}${C.reset}`);
+    console.log(`  ${C.bold}Source agent:${C.reset}     ${C.cyan}${agentName}${C.reset}`);
+    console.log(`  ${C.bold}Messages:${C.reset}         ${C.yellow}${extractedCount}${C.reset}`);
     console.log(
-      `  ${C.bold}Git branch:${C.reset}       ${C.magenta}${gitState.branch || '(yok)'}${C.reset}`,
+      `  ${C.bold}Git branch:${C.reset}       ${C.magenta}${gitState.branch || '(none)'}${C.reset}`,
     );
-    console.log(`  ${C.bold}Değişiklik:${C.reset}       ${C.yellow}${changedFiles} dosya${C.reset}`);
-    console.log(`  ${C.bold}Kaydedildi:${C.reset}       ${C.dim}${savedPath}${C.reset}`);
+    console.log(`  ${C.bold}Changes:${C.reset}          ${C.yellow}${changedFiles} file(s)${C.reset}`);
+    console.log(`  ${C.bold}Saved to:${C.reset}         ${C.dim}${savedPath}${C.reset}`);
     console.log('');
     console.log(
-      `  ${C.green}📋 Panoya kopyalandı${C.reset} — yeni ajana yapıştırabilirsiniz!`,
+      `  ${C.green}Copied to clipboard${C.reset} — you can paste it to the new agent!`,
     );
     console.log('');
   } catch (/** @type {any} */ err) {
-    console.error(`${C.red}Hata:${C.reset} ${err.message}`);
+    console.error(`${C.red}Error:${C.reset} ${err.message}`);
     process.exit(1);
   }
 }
@@ -173,7 +173,7 @@ async function cmdList(args) {
 
   console.log('');
   console.log(
-    `  ${C.bold}${C.cyan}copass${C.reset} — Algılanan ajan oturumları  ${C.dim}(${projectDir})${C.reset}`,
+    `  ${C.bold}${C.cyan}copass${C.reset} — Detected agent sessions  ${C.dim}(${projectDir})${C.reset}`,
   );
   console.log('');
 
@@ -207,7 +207,7 @@ async function cmdList(args) {
 
   // ── Header ────────────────────────────────────────────────────────────
   const topBorder = `  ┌${'─'.repeat(colWidths.agent)}┬${'─'.repeat(colWidths.found)}┬${'─'.repeat(colWidths.timestamp)}┬${'─'.repeat(colWidths.messages)}┬${'─'.repeat(colWidths.branch)}┐`;
-  const headerRow = `  │${C.bold}${pad(' Ajan', colWidths.agent)}${C.reset}│${C.bold}${pad(' Durum', colWidths.found)}${C.reset}│${C.bold}${pad(' Zaman Damgası', colWidths.timestamp)}${C.reset}│${C.bold}${pad(' Mesajlar', colWidths.messages)}${C.reset}│${C.bold}${pad(' Git Branch', colWidths.branch)}${C.reset}│`;
+  const headerRow = `  │${C.bold}${pad(' Agent', colWidths.agent)}${C.reset}│${C.bold}${pad(' Status', colWidths.found)}${C.reset}│${C.bold}${pad(' Timestamp', colWidths.timestamp)}${C.reset}│${C.bold}${pad(' Messages', colWidths.messages)}${C.reset}│${C.bold}${pad(' Git Branch', colWidths.branch)}${C.reset}│`;
   const midBorder = `  ├${'─'.repeat(colWidths.agent)}┼${'─'.repeat(colWidths.found)}┼${'─'.repeat(colWidths.timestamp)}┼${'─'.repeat(colWidths.messages)}┼${'─'.repeat(colWidths.branch)}┤`;
   const bottomBorder = `  └${'─'.repeat(colWidths.agent)}┴${'─'.repeat(colWidths.found)}┴${'─'.repeat(colWidths.timestamp)}┴${'─'.repeat(colWidths.messages)}┴${'─'.repeat(colWidths.branch)}┘`;
 
@@ -216,7 +216,9 @@ async function cmdList(args) {
   console.log(midBorder);
 
   for (const { name, session } of results) {
-    const found = session ? `${C.green} ✅${C.reset}     ` : `${C.red} ❌${C.reset}     `;
+    const found = session
+      ? `${C.green}${pad(' Active', colWidths.found)}${C.reset}`
+      : `${C.red}${pad(' —', colWidths.found)}${C.reset}`;
     const ts = session?.timestamp
       ? pad(' ' + new Date(session.timestamp).toISOString().slice(0, 19).replace('T', ' '), colWidths.timestamp)
       : pad(' —', colWidths.timestamp);
@@ -259,12 +261,12 @@ async function main() {
       break;
 
     default:
-      console.error(`${C.red}Hata:${C.reset} Bilinmeyen komut "${command}". --help ile kullanımı görün.`);
+      console.error(`${C.red}Error:${C.reset} Unknown command "${command}". Use --help to see usage.`);
       process.exit(1);
   }
 }
 
 main().catch((err) => {
-  console.error(`${C.red}Beklenmeyen hata:${C.reset} ${err.message}`);
+  console.error(`${C.red}Unexpected error:${C.reset} ${err.message}`);
   process.exit(1);
 });

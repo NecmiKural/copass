@@ -66,14 +66,14 @@ export async function createHandover(projectDir, options = {}) {
     // User explicitly chose an agent
     const match = results.find((r) => r && r.parserName === from);
     if (!match) {
-      throw new Error(`"${from}" ajanı için oturum bulunamadı.`);
+      throw new Error(`No session found for agent "${from}".`);
     }
     selected = match;
   } else {
     // Pick the session with the most recent timestamp
     const valid = results.filter(Boolean);
     if (valid.length === 0) {
-      throw new Error('Hiçbir ajan oturumu bulunamadı.');
+      throw new Error('No agent sessions found.');
     }
     selected = valid.reduce((best, cur) => {
       const bestTs = best.timestamp ? new Date(best.timestamp).getTime() : 0;
@@ -96,6 +96,16 @@ export async function createHandover(projectDir, options = {}) {
     .map((m) => `    <message role="${escapeXml(m.role)}">${escapeXml(m.content)}</message>`)
     .join('\n');
 
+  const summaryXml = selected.compactionSummary
+    ? `\n  <session_summary>\n    <![CDATA[\n${selected.compactionSummary}\n    ]]>\n  </session_summary>\n`
+    : '';
+
+  const instructionText = selected.compactionSummary
+    ? `Read the context above. The previous agent (${escapeXml(agentName)}) ran out of quota, and I am handing this project over to you.
+    Analyze the session summary, git state, and conversation history, and continue from where we left off.`
+    : `Read the context above. The previous agent (${escapeXml(agentName)}) ran out of quota, and I am handing this project over to you.
+    Analyze the git state and conversation history, and continue from where we left off.`;
+
   const xml = `<handover>
   <meta>
     <source_agent>${escapeXml(agentName)}</source_agent>
@@ -104,7 +114,7 @@ export async function createHandover(projectDir, options = {}) {
     <git_branch>${escapeXml(gitState.branch)}</git_branch>
     <timestamp>${escapeXml(now)}</timestamp>
     <log_file_path>${escapeXml(selected.logFilePath || '')}</log_file_path>
-  </meta>
+  </meta>${summaryXml}
 
   <git_state>
     <status>${escapeXml(gitState.status)}</status>
@@ -117,8 +127,7 @@ ${messagesXml}
   </conversation_context>
 
   <instruction>
-    Yukarıdaki context'i oku. Bir önceki ajanın (${escapeXml(agentName)}) kotası bitti ve ben bu projeyi sana devrediyorum.
-    Git durumunu ve konuşma geçmişini analiz et, kaldığımız yerden devam et.
+    ${instructionText}
   </instruction>
 </handover>`;
 

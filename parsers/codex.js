@@ -8,6 +8,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { isCompactionSummary } from './utils.js';
 
 const AGENT_NAME = 'codex';
 export const name = AGENT_NAME;
@@ -171,6 +172,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
     const branch = bestMeta?.payload?.gitBranch || bestMeta?.payload?.branch || null;
 
     // Collect user and assistant messages (skip session_meta and tool entries)
+    let compactionSummary = null;
     const messages = [];
     for (const entry of entries) {
       if (entry.type === 'session_meta') continue;
@@ -197,6 +199,9 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
         }
 
         if (text) {
+          if (isCompactionSummary(text)) {
+            compactionSummary = text;
+          }
           messages.push({
             role,
             content: truncate(text),
@@ -211,6 +216,9 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       if (role === 'user' || role === 'human') {
         const text = extractContent(entry.content || entry.message || '');
         if (text) {
+          if (isCompactionSummary(text)) {
+            compactionSummary = text;
+          }
           messages.push({
             role: 'user',
             content: truncate(text),
@@ -220,6 +228,9 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       } else if (role === 'assistant') {
         const text = extractContent(entry.content || entry.message || '');
         if (text) {
+          if (isCompactionSummary(text)) {
+            compactionSummary = text;
+          }
           messages.push({
             role: 'assistant',
             content: truncate(text),
@@ -260,6 +271,7 @@ export async function findLatestSession(projectDir, pairCount = DEFAULT_PAIR_COU
       totalMessages: messages.length,
       timestamp: fileStat.mtime.toISOString(),
       logFilePath: bestFile,
+      compactionSummary,
     };
   } catch {
     return null;
