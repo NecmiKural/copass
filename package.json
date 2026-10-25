@@ -1,7 +1,7 @@
 {
   "name": "copass",
   "version": "2.0.0",
-  "description": "Continue an unfinished coding session in another AI agent — an evidence-based hand-over built from local session logs, with zero tokens and zero dependencies",
+  "description": "Continue an unfinished coding session in another AI agent: an evidence-based hand-over built from local session logs, with zero tokens and zero dependencies",
   "main": "index.js",
   "bin": {
     "copass": "./index.js"

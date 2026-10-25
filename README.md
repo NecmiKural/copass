@@ -1,6 +1,6 @@
 # copass
 
-> Ran out of quota halfway through a task? Continue in another AI coding agent — exactly where you stopped.
+> Ran out of quota halfway through a task? Continue in another AI coding agent, from a hand-over built out of your local session logs.
 
 `copass` reads the local session logs of the agent you were using (Claude Code, Codex, Antigravity, GitHub Copilot, Cline, Gemini CLI, Cursor, OpenCode, pi and more), and writes a **hand-over** that the next agent can pick up: what you asked for, the rules you set, what was done, what failed, the plan, the verified state of the repository, and the request that was left unanswered.
 
@@ -19,9 +19,9 @@ Switching agents loses more than the chat history:
 
 - **Your rules get dropped.** Compaction and summaries keep only a fraction of the constraints you stated ("don't touch the migrations", "sadece Tailwind kullan"). copass quotes them verbatim.
 - **The last request is the one that matters.** When a quota runs out, your latest message usually has no answer yet. copass keeps it and marks it as unanswered.
-- **The work is in the tool calls, not in the chat.** Which files were edited, which commands ran, what failed — copass carries this trail, so the next agent doesn't redo or repeat dead ends.
+- **The work is in the tool calls, not in the chat.** Which files were edited, which commands ran, what failed: copass carries this trail, so the next agent doesn't redo or repeat dead ends.
 - **The repository is the ground truth.** copass adds the current git state itself (branch, commits made since the session started, staged, unstaged and untracked changes, the diff) and tells the next agent to trust it over the transcript.
-- **Native importers only go one way.** Codex can import Claude Code chats, Cursor can import Claude Code chats, VS Code can hand a session to another harness — each into itself only, and none of them carries git state. copass works in any direction, including into Claude Code.
+- **Native importers only go one way.** Codex can import Claude Code chats, Cursor can import Claude Code chats, VS Code can hand a session to another harness, each into itself only, and none of them carries git state. copass works in any direction, including into Claude Code.
 
 ## What the hand-over contains
 
@@ -42,9 +42,9 @@ The hand-over is an XML-tagged Markdown document, ordered the way models read be
 | `latest_request` | The user's last message verbatim, whether it was answered, queued prompts and unsent drafts |
 | `instruction` | Verify the repository first, treat "done/fixed/tests pass" as claims, restate the plan, then continue |
 
-Everything quoted from the history is framed as information, not instructions. Section tags carry a random suffix that changes with every hand-over, so quoted text — a transcript, a tool output, a summary — cannot open, close or imitate a section or a user turn, and quoted code is never rewritten. Credentials (API keys, tokens, JWTs, private keys, passwords in URLs, `SECRET=` assignments) are redacted.
+Everything quoted from the history is framed as information, not instructions. Section tags carry a random suffix that changes with every hand-over, so quoted text (a transcript, a tool output, a summary) cannot open, close or imitate a section or a user turn, and quoted code is never rewritten. Credentials (API keys, tokens, JWTs, private keys, passwords in URLs, `SECRET=` assignments) are redacted.
 
-The hand-over is about 12k tokens by default (`--budget` changes it). The complete transcript — every message and tool call — is saved next to it, so the next agent can search for exact details instead of guessing.
+The hand-over is about 12k tokens by default (`--budget` changes it). The complete transcript, every message and tool call, is saved next to it, so the next agent can search for exact details instead of guessing.
 
 ## Install
 
@@ -69,7 +69,7 @@ copass --goal "now write the tests"   # tell the next agent what to do instead o
 copass --stdout | less      # print instead of copying
 ```
 
-With the skill installed, open the next agent in the project and say **"continue where I left off"** (or "kaldığımız yerden devam et"). The agent runs copass itself, reads the hand-over, verifies the repository and carries on — nothing to paste.
+With the skill installed, open the next agent in the project and say **"continue where I left off"** (or "kaldığımız yerden devam et"). The agent runs copass itself, reads the hand-over, verifies the repository and carries on, with nothing to paste.
 
 Hand-overs are written to `.copass/` in the project. The folder gets its own `.gitignore`, so conversation text and diffs are never committed. The newest ten hand-overs are kept.
 
@@ -84,7 +84,7 @@ Hand-overs are written to `.copass/` in the project. The folder gets its own `.g
 | `--budget <tokens>` | Approximate size of the hand-over (default 12000) |
 | `--stdout` | Print the hand-over; status goes to stderr |
 | `--no-copy` | Don't touch the clipboard |
-| `--exclude <agent>` | Ignore an agent (repeatable) — e.g. the one you are running copass from |
+| `--exclude <agent>` | Ignore an agent (repeatable), for example the one you are running copass from |
 | `--include-self` | Allow handing over the session copass itself runs inside |
 | `--no-redact` | Keep secrets (not recommended) |
 | `--dir <path>` | Project directory (default: current directory) |
@@ -107,11 +107,11 @@ Hand-overs are written to `.copass/` in the project. The folder gets its own `.g
 | Goose | `goose` | Goose `sessions/sessions.db` | from source | `goose run -s --text "<prompt>"` |
 | Factory Droid | `factory` | `~/.factory/sessions/` | from source | `droid "<prompt>"` |
 | Qwen Code | `qwen` | `~/.qwen/projects/` | from source | `qwen -i "<prompt>"` |
-| Kimi CLI | `kimi` | `~/.kimi-code/sessions/`, legacy `~/.kimi/sessions/` | from source | — (paste instead) |
+| Kimi CLI | `kimi` | `~/.kimi-code/sessions/`, legacy `~/.kimi/sessions/` | from source | none (paste instead) |
 | Aider | `aider` | `.aider.chat.history.md` in the repo | from source | `aider --read .copass/latest.md` |
 | pi | `pi` | `~/.pi/agent/sessions/` | from source | `pi "<prompt>"` |
 
-"Verified" adapters were built from audits of each agent's current on-disk format and checked against real sessions; "from source" adapters follow the agent's upstream source and are tested with fixtures in the same format. A session belongs to a project when the agent recorded a working directory that is the project, a subdirectory of it, or another worktree of the same repository — a session started in a parent directory never matches, and a session from exactly this directory is preferred.
+"Verified" adapters were built from audits of each agent's current on-disk format and checked against real sessions; "from source" adapters follow the agent's upstream source and are tested with fixtures in the same format. A session belongs to a project when the agent recorded a working directory that is the project, a subdirectory of it, or another worktree of the same repository; a session started in a parent directory never matches, and a session from exactly this directory is preferred.
 
 ## How it works
 
