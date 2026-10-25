@@ -1,16 +1,25 @@
 {
   "name": "copass",
-  "version": "1.0.0",
-  "description": "Context relay tool — seamlessly switch between AI coding assistants when quota runs out",
+  "version": "2.0.0",
+  "description": "Continue an unfinished coding session in another AI agent — an evidence-based hand-over built from local session logs, with zero tokens and zero dependencies",
   "main": "index.js",
   "bin": {
     "copass": "./index.js"
   },
   "type": "module",
-  "scripts": {
-    "start": "node index.js"
+  "engines": {
+    "node": ">=22.5"
   },
-  "keywords": ["ai", "context", "relay", "claude", "codex", "copilot", "antigravity"],
+  "files": [
+    "index.js",
+    "lib/",
+    "agents/"
+  ],
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "keywords": ["ai", "agent", "handoff", "context", "relay", "claude-code", "codex", "copilot", "antigravity", "cline", "gemini-cli", "cursor", "opencode"],
   "author": "NecmiKural",
   "license": "MIT"
 }
