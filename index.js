@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { ADAPTERS, AGENT_NAMES, adapterByName } from './agents/index.js';
-import { copyToClipboard, launchAgent, writeHandover } from './lib/output.js';
+import { canLaunch, copyToClipboard, launchAgent, writeHandover } from './lib/output.js';
 import { resolveProject } from './lib/project.js';
 import { buildHandover, defaultContext, findCandidates, pickSession } from './lib/relay.js';
 import { installSkill } from './lib/skill.js';
@@ -115,7 +115,9 @@ async function relay(values) {
   const out = values.stdout ? process.stderr : process.stdout;
   const c = paint(out);
   if (values.stdout) process.stdout.write(`${built.handover}\n`);
-  const clipboard = values.stdout || values['no-copy'] || values.to ? null : copyToClipboard(built.handover);
+  const target = values.to ? adapterByName(values.to) : null;
+  const launchable = target ? canLaunch(target) : false;
+  const clipboard = values.stdout || values['no-copy'] || launchable ? null : copyToClipboard(built.handover);
 
   const { session } = picked;
   const { meta } = session;
@@ -135,17 +137,17 @@ async function relay(values) {
     `  Contents  ${contents.join(' · ')}`,
     `  Size      ~${Math.round(built.handover.length / 4 / 100) / 10}k tokens${built.redactions ? ` · ${built.redactions} secret(s) redacted` : ''}`,
     `  Saved     ${relative(process.cwd(), built.paths.latest) || built.paths.latest} ${c.dim('(+ full transcript)')}`,
-    clipboard && `  Copied    ${c.green('to the clipboard')} — paste it into your next agent`,
-    !clipboard && !values.stdout && !values.to && !values['no-copy'] && `  Copied    ${c.yellow('no clipboard tool found')} — open the saved file instead`,
+    clipboard && `  Copied    ${c.green('to the clipboard')} — paste it into ${target ? target.label : 'your next agent'}`,
+    !clipboard && !values.stdout && !launchable && !values['no-copy'] && `  Copied    ${c.yellow('no clipboard tool found')} — open the saved file instead`,
+    target && !launchable && `  ${c.yellow(`${target.label} can't be started with a first prompt from the command line — open it and paste.`)}`,
     '',
   ].filter((l) => l !== false && l !== null && l !== undefined);
   out.write(`${lines.join('\n')}\n`);
 
-  if (values.to) {
-    const target = adapterByName(values.to);
+  if (launchable) {
     out.write(`  Starting ${target.label}…\n\n`);
     process.exitCode = launchAgent(target, project.dir);
-  } else if (!values.stdout) {
+  } else if (!values.stdout && !target) {
     out.write(c.dim('  Tip: `copass --to <agent>` starts the next agent with it directly.\n\n'));
   }
 }
