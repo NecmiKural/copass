@@ -126,7 +126,7 @@ async function relay(values) {
   if (values.stdout) process.stdout.write(`${built.handover}\n`);
   const target = values.to ? adapterByName(values.to) : null;
   // Launching points the agent at .copass/latest.md, so it needs a saved file.
-  const launchable = target && !saveError ? canLaunch(target) : false;
+  const launchable = target && !saveError ? canLaunch(target, ctx) : false;
   const clipboard = values.stdout || values['no-copy'] || launchable ? null : copyToClipboard(built.handover);
 
   const { session } = picked;
@@ -157,8 +157,8 @@ async function relay(values) {
   out.write(`${lines.join('\n')}\n`);
 
   if (launchable) {
-    out.write(`  Starting ${target.label}…\n\n`);
-    const result = launchAgent(target, project.dir);
+    out.write(`  Starting ${target.label}…${target.launchNote ? `\n  ${c.dim(target.launchNote)}` : ''}\n\n`);
+    const result = launchAgent(target, project.dir, ctx);
     if ('error' in result) {
       const copied = copyToClipboard(built.handover);
       out.write(`  ${c.red(`Could not start ${target.label}${result.bin ? ` (\`${result.bin}\`)` : ''}: ${result.error}.`)}${copied ? ' The hand-over is on the clipboard instead.' : ''}\n\n`);

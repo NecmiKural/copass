@@ -20,6 +20,8 @@ export const label = 'Claude Code';
 const SESSION_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/;
 const MAX_DIR_NAME = 200;
 const MAX_PROBES = 40;
+const ENOUGH_CANDIDATES = 20;
+const TITLE_WINDOW_CHARS = 512 * 1024;
 const TAIL_LINES = 3000;
 const HEAD_BYTES = 128 * 1024;
 
@@ -108,8 +110,13 @@ function probe(file) {
   let entrypoint = null;
   let tailCwd = null;
   let scanned = 0;
+  let chars = 0;
   for (const line of linesFromEnd(file, 256 * 1024)) {
     if (++scanned > TAIL_LINES) break;
+    // Tail records can be megabytes (API request blobs); once the last message is known,
+    // look for the title only within a small window.
+    chars += line.length;
+    if (lastActivity !== null && chars > TITLE_WINDOW_CHARS) break;
     const r = tryJson(line);
     if (!r) continue;
     if (r.type === 'custom-title' && title === null) title = r.customTitle ?? null;
@@ -159,10 +166,12 @@ export async function findSessions(project, ctx) {
   };
   // Separate probe budgets, so busy sibling projects cannot crowd out the project's own sessions.
   const { exact, prefixed } = candidateDirs(join(configDir(ctx), 'projects'), project, ctx);
-  const files = [...sessionFiles(exact), ...sessionFiles(prefixed)];
+  const files = [...sessionFiles(exact), ...sessionFiles(prefixed)].sort((a, b) => b.mtime - a.mtime);
 
   const out = [];
   for (const f of files) {
+    // lastActivity <= mtime, so once enough sessions are found an older file cannot outrank them.
+    if (out.length >= ENOUGH_CANDIDATES && f.mtime < out[ENOUGH_CANDIDATES - 1].lastActivity) break;
     const p = probe(f.path);
     if (!p) continue;
     const score = project.match(p.cwd);
@@ -179,6 +188,7 @@ export async function findSessions(project, ctx) {
       background: p.entrypoint === 'sdk-cli',
       ref: { file: f.path, startedAt: p.startedAt },
     });
+    out.sort((a, b) => b.lastActivity - a.lastActivity);
   }
   return out;
 }
