@@ -21,8 +21,9 @@
  *     genuine prompts only, visible replies only, tool calls with outcomes,
  *     structural compaction boundaries, plan snapshots, stop reasons.
  *
- *   launch(prompt): [bin, args]
- *     How to start the agent interactively with a first prompt (for --to).
+ *   launch(prompt): [bin, args] | null
+ *     How to start the agent interactively with a first prompt (for --to);
+ *     null when the agent cannot be started that way from a shell.
  *
  * Adapters read paths from ctx.home / ctx.env (never os.homedir() or
  * process.env directly) so tests can point them at fixture directories,

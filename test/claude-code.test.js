@@ -34,11 +34,15 @@ function fixture() {
       chain('user', t(3), { cwd, toolUseResult: { stderr: 'boom' }, sourceToolAssistantUUID: 'x', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu2', is_error: true, content: '1 test failed: parser.spec.js' }] } }),
       chain('assistant', t(4), { cwd, message: { id: 'm3', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id: 'tu3', name: 'TodoWrite', input: { todos: [{ content: 'fix tokenizer', status: 'completed' }, { content: 'fix tests', status: 'in_progress' }] } }] } }),
       chain('system', t(5), { cwd, subtype: 'compact_boundary', compactMetadata: { trigger: 'auto', preTokens: 900000 } }),
-      chain('user', t(5), { cwd, isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: 'user', content: 'This session is being continued from a previous conversation that ran out of context.\n\nSummary:\n1. Primary Request: fix the parser' } }),
+      chain('user', t(5), { cwd, isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: 'user', content: 'This session is being continued from a previous conversation that ran out of context.\n\nSummary:\n1. Primary Request: fix the parser\n\nPlease continue the conversation from where we left off without asking the user any further questions. Continue with the last task.' } }),
       chain('user', t(6), { cwd, message: { role: 'user', content: '<command-name>/model</command-name>\n<command-args>opus</command-args>' } }),
       chain('assistant', t(7), { cwd, isSidechain: true, message: { id: 'side', content: [{ type: 'text', text: 'subagent noise' }] } }),
       chain('user', t(8), { cwd, message: { role: 'user', content: 'Now also handle unicode identifiers' } }),
       chain('assistant', t(9), { cwd, isApiErrorMessage: true, error: 'rate_limit', apiErrorStatus: 429, message: { model: '<synthetic>', content: [{ type: 'text', text: "You've hit your session limit · resets 2pm (Pacific/Auckland)" }] } }),
+      { type: 'queue-operation', operation: 'enqueue', content: '<task-notification>background job finished</task-notification>', timestamp: t(10) },
+      { type: 'queue-operation', operation: 'enqueue', timestamp: t(10) },
+      { type: 'queue-operation', operation: 'dequeue', timestamp: t(10) },
+      { type: 'queue-operation', operation: 'dequeue', timestamp: t(10) },
       { type: 'queue-operation', operation: 'enqueue', content: 'and update the README', timestamp: t(10) },
       { type: 'custom-title', customTitle: 'Parser fixes', sessionId: ID },
     ],
@@ -82,6 +86,7 @@ test('loads prompts, tools, plan, compaction, stop and queued prompts', async ()
   assert.deepEqual(s.latest.queued.map((q) => q.text), ['and update the README']);
   assert.equal(s.stop.reason, 'quota');
   assert.match(s.compaction.summary, /^Summary:/);
+  assert.doesNotMatch(s.compaction.summary, /continue the conversation/i, "the summary's order to the old model is dropped");
   assert.equal(s.compaction.trigger, 'auto');
   assert.deepEqual(s.files.map((f) => f.path), [`${projectDir}/parser.js`]);
   assert.equal(s.failures[0].error, '1 test failed: parser.spec.js');

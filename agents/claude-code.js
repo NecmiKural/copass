@@ -28,10 +28,12 @@ const PLAN_STATUS = { completed: 'done', in_progress: 'active', pending: 'pendin
 
 // Harness text that arrives inside user records but was never typed by the user.
 const NOISE_BLOCK =
-  /^\s*<(?:system-reminder|ide_opened_file|ide_selection|task-notification|local-command-(?:stdout|stderr|caveat)|command-message|bash-(?:stdout|stderr)|observed_from_primary_session|user-prompt-submit-hook)\b/;
+  /^\s*<(?:system-reminder|ide_opened_file|ide_selection|task-notification|agent-message|local-command-(?:stdout|stderr|caveat)|command-message|bash-(?:stdout|stderr)|observed_from_primary_session|user-prompt-submit-hook)\b/;
 const INLINE_REMINDER = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
 const INTERRUPTED = /^\[Request interrupted by user/;
 const SUMMARY_PREAMBLE = /^This session is being continued from a previous conversation[^\n]*\n+/;
+// Claude's summary ends by telling the previous model to resume without asking — not meant for the next agent.
+const SUMMARY_DIRECTIVE = /\n+[^\n]*(?:Please )?continue the conversation from where (?:it|we|you) left off[\s\S]*$/i;
 
 function configDir(ctx) {
   return (ctx.env.CLAUDE_CONFIG_DIR ?? join(ctx.home, '.claude')).normalize('NFC');
@@ -49,7 +51,11 @@ export function sanitize(p) {
   return e.length <= MAX_DIR_NAME ? e : `${e.slice(0, MAX_DIR_NAME)}-${Math.abs(javaHash(p)).toString(36)}`;
 }
 
-/** Project directories whose name could belong to one of the project's roots (or a subdirectory). */
+/**
+ * Project directories whose name could belong to one of the project's roots.
+ * Exact names come first; prefix matches (subdirectories, but also siblings
+ * such as "app-api" for "app") are confirmed later against the recorded cwd.
+ */
 function candidateDirs(projectsDir, project, ctx) {
   const fold = ctx.platform === 'darwin' || ctx.platform === 'win32' ? (s) => s.toLowerCase() : (s) => s;
   const keys = new Set();
@@ -57,18 +63,20 @@ function candidateDirs(projectsDir, project, ctx) {
     keys.add(fold(sanitize(root)));
     if (/[^\x00-\x7f]/.test(root)) keys.add(fold(sanitize(root.normalize('NFD'))));
   }
-  return listDir(projectsDir)
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    .filter((n) => {
-      const f = fold(n);
-      for (const k of keys) {
-        if (f === k || f.startsWith(`${k}-`)) return true;
-        if (k.length > MAX_DIR_NAME && f.startsWith(k.slice(0, MAX_DIR_NAME))) return true;
-      }
-      return false;
-    })
-    .map((n) => join(projectsDir, n));
+  const exact = [];
+  const prefixed = [];
+  for (const d of listDir(projectsDir)) {
+    if (!d.isDirectory()) continue;
+    const f = fold(d.name);
+    for (const k of keys) {
+      const long = k.length > MAX_DIR_NAME && f.startsWith(k.slice(0, MAX_DIR_NAME));
+      if (f === k || long) exact.push(join(projectsDir, d.name));
+      else if (f.startsWith(`${k}-`)) prefixed.push(join(projectsDir, d.name));
+      else continue;
+      break;
+    }
+  }
+  return { exact, prefixed };
 }
 
 /** First records of a file, enough to find the launch cwd and start time. */
@@ -98,6 +106,7 @@ function probe(file) {
   let aiTitle = null;
   let relocated = null;
   let entrypoint = null;
+  let tailCwd = null;
   let scanned = 0;
   for (const line of linesFromEnd(file, 256 * 1024)) {
     if (++scanned > TAIL_LINES) break;
@@ -109,11 +118,14 @@ function probe(file) {
     else if (lastActivity === null && isMessage(r) && r.timestamp) {
       lastActivity = Date.parse(r.timestamp);
       entrypoint = r.entrypoint ?? null;
+      tailCwd = r.cwd ?? null;
     }
     // Titles are re-appended near the tail; stop once the essentials are found.
     if (lastActivity !== null && (title !== null || scanned > 400)) break;
   }
   if (lastActivity === null) return null;
+  // The launch cwd is in the first records; a huge first record (an image) can push it
+  // past the head window, so the cwd of the last message is the fallback.
   const head = headRecords(file);
   const startedAt = head.find((r) => r.timestamp)?.timestamp;
   const firstUser = head.find((r) => isMessage(r) && r.type === 'user' && r.toolUseResult === undefined && !r.isCompactSummary);
@@ -121,7 +133,7 @@ function probe(file) {
     lastActivity,
     title: title ?? aiTitle,
     preview: firstUser ? promptText(firstUser.message?.content) : null,
-    cwd: relocated ?? head.find((r) => r.cwd)?.cwd ?? null,
+    cwd: relocated ?? head.find((r) => r.cwd)?.cwd ?? tailCwd,
     entrypoint,
     startedAt: startedAt ? Date.parse(startedAt) : undefined,
   };
@@ -133,19 +145,24 @@ function probe(file) {
  * @returns {Promise<import('./index.js').Candidate[]>}
  */
 export async function findSessions(project, ctx) {
-  const files = [];
-  for (const dir of candidateDirs(join(configDir(ctx), 'projects'), project, ctx)) {
-    for (const entry of listDir(dir)) {
-      if (!entry.isFile() || !SESSION_FILE.test(entry.name)) continue;
-      const path = join(dir, entry.name);
-      const st = statSafe(path);
-      if (st && st.size > 0) files.push({ path, id: entry.name.slice(0, -'.jsonl'.length), mtime: st.mtimeMs });
+  const sessionFiles = (dirs) => {
+    const files = [];
+    for (const dir of dirs) {
+      for (const entry of listDir(dir)) {
+        if (!entry.isFile() || !SESSION_FILE.test(entry.name)) continue;
+        const path = join(dir, entry.name);
+        const st = statSafe(path);
+        if (st && st.size > 0) files.push({ path, id: entry.name.slice(0, -'.jsonl'.length), mtime: st.mtimeMs });
+      }
     }
-  }
-  files.sort((a, b) => b.mtime - a.mtime);
+    return files.sort((a, b) => b.mtime - a.mtime).slice(0, MAX_PROBES);
+  };
+  // Separate probe budgets, so busy sibling projects cannot crowd out the project's own sessions.
+  const { exact, prefixed } = candidateDirs(join(configDir(ctx), 'projects'), project, ctx);
+  const files = [...sessionFiles(exact), ...sessionFiles(prefixed)];
 
   const out = [];
-  for (const f of files.slice(0, MAX_PROBES)) {
+  for (const f of files) {
     const p = probe(f.path);
     if (!p) continue;
     const score = project.match(p.cwd);
@@ -233,8 +250,14 @@ function planFromTaskDir(dir) {
 function stopEvent(record, ts) {
   const text = textOf(record.message?.content);
   let reason = 'error';
-  if (record.error === 'rate_limit') reason = /limit/i.test(text) ? 'quota' : 'rate_limit';
-  else if (record.error === 'server_error' || record.apiErrorStatus >= 500) reason = 'overloaded';
+  if (record.error === 'rate_limit') {
+    // "You've hit your session limit · resets 2pm" is a usage quota; a plain 429 is a rate limit.
+    reason = /(?:usage|session|weekly|daily|monthly|5-hour)\s+limit|hit your limit|resets\s/i.test(text) ? 'quota' : 'rate_limit';
+  } else if (/oauth|token|auth/i.test(text) || record.error === 'authentication_failed') {
+    reason = 'error';
+  } else if (record.error === 'server_error' || record.apiErrorStatus >= 500 || /overloaded/i.test(text)) {
+    reason = 'overloaded';
+  }
   return { kind: 'stop', reason, message: text, ts };
 }
 
@@ -260,7 +283,9 @@ export async function loadSession(candidate, ctx) {
       lastCompaction = { kind: 'compaction', trigger: r.compactMetadata?.trigger, ts };
       events.push(lastCompaction);
     } else if (r.type === 'queue-operation') {
-      if (r.operation === 'enqueue' && r.content) queue.push({ text: String(r.content), ts });
+      // Harness items (task notifications, agent messages) are queued too; keep the FIFO
+      // aligned with a placeholder and drop them at the end.
+      if (r.operation === 'enqueue') queue.push({ text: r.content ? promptText(String(r.content)) : '', ts });
       else if (r.operation === 'dequeue' || r.operation === 'remove') queue.shift();
     } else if (r.type === 'attachment' && r.attachment?.type === 'queued_command') {
       // A prompt typed while the agent was busy and delivered mid-turn.
@@ -272,7 +297,7 @@ export async function loadSession(candidate, ctx) {
     } else if (r.type === 'user') {
       const content = r.message?.content;
       if (r.isCompactSummary) {
-        const summary = textOf(content).replace(SUMMARY_PREAMBLE, '').trim();
+        const summary = textOf(content).replace(SUMMARY_PREAMBLE, '').replace(SUMMARY_DIRECTIVE, '').trim();
         if (lastCompaction && !lastCompaction.summary) lastCompaction.summary = summary;
         else events.push((lastCompaction = { kind: 'compaction', summary, ts }));
         continue;
@@ -325,7 +350,7 @@ export async function loadSession(candidate, ctx) {
     }
   }
 
-  for (const q of queue) events.push({ kind: 'prompt', source: 'queued', text: q.text, ts: q.ts });
+  for (const q of queue) if (q.text) events.push({ kind: 'prompt', source: 'queued', text: q.text, ts: q.ts });
   const taskPlan = planFromTaskDir(join(configDir(ctx), 'tasks', candidate.id));
   if (taskPlan) events.push(taskPlan);
 
