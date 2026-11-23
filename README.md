@@ -110,6 +110,9 @@ Hand-overs are written to `.copass/` in the project. The folder gets its own `.g
 | Kimi CLI | `kimi` | `~/.kimi-code/sessions/`, legacy `~/.kimi/sessions/` | from source | none (paste instead) |
 | Aider | `aider` | `.aider.chat.history.md` in the repo | from source | `aider --read .copass/latest.md` |
 | pi | `pi` | `~/.pi/agent/sessions/` | from source | `pi "<prompt>"` |
+| onerig (orchestrator runs) | `onerig` | `.onerig/runs/<run id>/` in the repository | ✓ | — (continue with `onerig resume`) |
+
+An onerig run is listed while it is unfinished; from the run's worktree, `copass --from onerig --to codex` hands its current task to another agent. Only the goal is treated as the user's words; the task onerig's planner wrote is passed on as agent output.
 
 "Verified" adapters were built from audits of each agent's current on-disk format and checked against real sessions; "from source" adapters follow the agent's upstream source and are tested with fixtures in the same format. A session belongs to a project when the agent recorded a working directory that is the project, a subdirectory of it, or another worktree of the same repository; a session started in a parent directory never matches, and a session from exactly this directory is preferred.
 

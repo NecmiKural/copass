@@ -43,6 +43,7 @@ import * as factory from './factory.js';
 import * as geminiCli from './gemini-cli.js';
 import * as goose from './goose.js';
 import * as kimi from './kimi.js';
+import * as onerig from './onerig.js';
 import * as opencode from './opencode.js';
 import * as pi from './pi.js';
 import * as qwen from './qwen.js';
@@ -86,6 +87,7 @@ export const ADAPTERS = [
   kimi,
   aider,
   pi,
+  onerig,
 ];
 
 export const AGENT_NAMES = ADAPTERS.map((a) => a.name);
