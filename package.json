@@ -1,10 +1,13 @@
 {
-  "name": "copass",
+  "name": "@necmikural/copass",
   "version": "2.0.0",
   "description": "Continue an unfinished coding session in another AI agent: an evidence-based hand-over built from local session logs, with zero tokens and zero dependencies",
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "index.js",
   "bin": {
-    "copass": "./index.js"
+    "copass": "index.js"
   },
   "type": "module",
   "engines": {
@@ -20,6 +23,14 @@
     "test": "node --test"
   },
   "keywords": ["ai", "agent", "handoff", "context", "relay", "claude-code", "codex", "copilot", "antigravity", "cline", "gemini-cli", "cursor", "opencode"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NecmiKural/copass.git"
+  },
+  "homepage": "https://github.com/NecmiKural/copass#readme",
+  "bugs": {
+    "url": "https://github.com/NecmiKural/copass/issues"
+  },
   "author": "NecmiKural",
   "license": "MIT"
 }

@@ -51,10 +51,22 @@ The hand-over is about 12k tokens by default (`--budget` changes it). The comple
 Requires Node.js 22.5 or newer.
 
 ```sh
+npm install -g @necmikural/copass
+copass install-skill  # optional: lets agents pull the hand-over themselves
+```
+
+Or run without installing:
+
+```sh
+npx @necmikural/copass
+```
+
+From source:
+
+```sh
 git clone https://github.com/NecmiKural/copass.git
 cd copass
 npm link            # puts `copass` on your PATH
-copass install-skill  # optional: lets agents pull the hand-over themselves
 ```
 
 ## Use
