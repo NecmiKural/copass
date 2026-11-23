@@ -5,6 +5,7 @@ import { test } from 'node:test';
 
 import { ADAPTERS } from '../agents/index.js';
 import { handoverPaths, prepareStore, writeHandover } from '../lib/output.js';
+import { resolveSkillCommand } from '../lib/skill.js';
 import { tempDir } from './helpers.js';
 
 test('writes owner-only files and a .gitignore, keeps the newest ten', () => {
@@ -45,4 +46,17 @@ test('every adapter honours the contract', () => {
     const launch = a.launch('hello');
     assert.ok(launch === null || (Array.isArray(launch) && typeof launch[0] === 'string' && Array.isArray(launch[1])), `${a.name}.launch`);
   }
+});
+
+test('resolveSkillCommand handles global bin, npx, and direct script paths', () => {
+  assert.equal(resolveSkillCommand({ argv1: '/usr/local/bin/copass' }), 'copass');
+  assert.equal(
+    resolveSkillCommand({ argv1: '/usr/local/bin/copass', env: { npm_command: 'exec' } }),
+    'npx -y @necmikural/copass',
+  );
+  assert.equal(
+    resolveSkillCommand({ argv1: '/home/u/.npm/_npx/123/node_modules/.bin/copass' }),
+    'npx -y @necmikural/copass',
+  );
+  assert.equal(resolveSkillCommand({ argv1: '/repo/index.js', root: '/repo' }), 'node "/repo/index.js"');
 });

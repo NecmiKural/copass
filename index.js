@@ -19,11 +19,12 @@ import { canLaunch, copyToClipboard, launchAgent, writeHandover } from './lib/ou
 import { resolveProject } from './lib/project.js';
 import { redact } from './lib/redact.js';
 import { buildHandover, defaultContext, findCandidates, pickSession } from './lib/relay.js';
-import { installSkill } from './lib/skill.js';
+import { installSkill, resolveSkillCommand } from './lib/skill.js';
 import { oneLine } from './lib/text.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
+const PKG = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+const VERSION = PKG.version;
 
 // ─── Output helpers ──────────────────────────────────────────────────────────
 
@@ -207,8 +208,7 @@ async function list(values) {
 // ─── install-skill ───────────────────────────────────────────────────────────
 
 function skill() {
-  const viaBin = basename(process.argv[1] ?? '') === 'copass';
-  const command = viaBin ? 'copass' : `node "${join(ROOT, 'index.js')}"`;
+  const command = resolveSkillCommand({ argv1: process.argv[1], root: ROOT, pkgName: PKG.name, env: process.env });
   const written = installSkill(homedir(), command);
   process.stdout.write(`\n  Installed the copass skill for your agents:\n${written.map((f) => `   ${f}`).join('\n')}\n\n  In the next agent, just say "continue where I left off".\n\n`);
 }
